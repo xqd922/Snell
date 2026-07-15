@@ -9,7 +9,7 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="1.9.6"
+sh_ver="1.9.7"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
@@ -571,7 +571,10 @@ dns = ${dns}"
     # 保留未知的自定义配置项
     if [[ -f "${snell_conf}" ]]; then
         local custom_configs=$(awk -F '=' '{
-            if ($1 !~ /^[[:space:]]*(listen|ipv6|psk|obfs|obfs-host|tfo|dns|dns-ip-preference|mode|version|egress-interface|\[snell-server\]|#)[[:space:]]*/) {
+            key = $1
+            sub(/^[[:space:]]+/, "", key)
+            sub(/[[:space:]]+$/, "", key)
+            if (key != "listen" && key != "ipv6" && key != "psk" && key != "obfs" && key != "obfs-host" && key != "tfo" && key != "dns" && key != "dns-ip-preference" && key != "mode" && key != "version" && key != "egress-interface" && key != "[snell-server]" && $0 !~ /^[[:space:]]*#/) {
                 if (NF > 0 && $0 !~ /^[[:space:]]*$/) {
                     print $0
                 }
@@ -592,20 +595,20 @@ dns = ${dns}"
 # 读取配置文件
 readConfig(){
 	[[ ! -e ${snell_conf} ]] && echo -e "${Error} Snell Server 配置文件不存在！" && exit 1
-	listen_val=$(grep -E '^listen\s*=' ${snell_conf} | sed -E 's/^listen\s*=\s*//' | xargs)
+	listen_val=$(grep -m 1 -E '^listen\s*=' ${snell_conf} | sed -E 's/^listen\s*=\s*//' | xargs)
 	port=$(echo "$listen_val" | awk -F',' '{print $1}' | awk -F':' '{print $NF}' | xargs)
-	ipv6=$(cat ${snell_conf}|grep 'ipv6 = '|awk -F 'ipv6 = ' '{print $NF}')
-	psk=$(cat ${snell_conf}|grep 'psk = '|awk -F 'psk = ' '{print $NF}')
-	obfs=$(cat ${snell_conf}|grep 'obfs = '|awk -F 'obfs = ' '{print $NF}')
-	host=$(cat ${snell_conf}|grep 'obfs-host = '|awk -F 'obfs-host = ' '{print $NF}')
-	tfo=$(cat ${snell_conf}|grep 'tfo = '|awk -F 'tfo = ' '{print $NF}')
-	dns=$(cat ${snell_conf}|grep 'dns = '|awk -F 'dns = ' '{print $NF}')
-	ver=$(cat ${snell_conf}|grep 'version = '|awk -F 'version = ' '{print $NF}')
-	dns_ip_pref=$(cat ${snell_conf}|grep 'dns-ip-preference = '|awk -F 'dns-ip-preference = ' '{print $NF}')
+	ipv6=$(cat ${snell_conf}|grep -m 1 'ipv6 = '|awk -F 'ipv6 = ' '{print $NF}')
+	psk=$(cat ${snell_conf}|grep -m 1 'psk = '|awk -F 'psk = ' '{print $NF}')
+	obfs=$(cat ${snell_conf}|grep -m 1 'obfs = '|awk -F 'obfs = ' '{print $NF}')
+	host=$(cat ${snell_conf}|grep -m 1 'obfs-host = '|awk -F 'obfs-host = ' '{print $NF}')
+	tfo=$(cat ${snell_conf}|grep -m 1 'tfo = '|awk -F 'tfo = ' '{print $NF}')
+	dns=$(cat ${snell_conf}|grep -m 1 'dns = '|awk -F 'dns = ' '{print $NF}')
+	ver=$(cat ${snell_conf}|grep -m 1 'version = '|awk -F 'version = ' '{print $NF}')
+	dns_ip_pref=$(cat ${snell_conf}|grep -m 1 'dns-ip-preference = '|awk -F 'dns-ip-preference = ' '{print $NF}')
 	[[ -z "$dns_ip_pref" && "$ver" == "6" ]] && dns_ip_pref="default"
-	mode=$(cat ${snell_conf}|grep 'mode = '|awk -F 'mode = ' '{print $NF}')
+	mode=$(cat ${snell_conf}|grep -m 1 'mode = '|awk -F 'mode = ' '{print $NF}')
 	[[ -z "$mode" && "$ver" == "6" ]] && mode="default"
-	egress_interface=$(cat ${snell_conf}|grep 'egress-interface = '|awk -F 'egress-interface = ' '{print $NF}')
+	egress_interface=$(cat ${snell_conf}|grep -m 1 'egress-interface = '|awk -F 'egress-interface = ' '{print $NF}')
 }
 
 # 设置端口
