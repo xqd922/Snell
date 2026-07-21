@@ -9,7 +9,7 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="1.9.8"
+sh_ver="1.9.9"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
@@ -1822,11 +1822,6 @@ updateSnellServer(){
     readConfig
 
     echo -e "${Info} 准备更新 Snell Server..."
-
-    # 显示详细的版本检查信息
-    echo -e "${Info} 正在检查版本信息..."
-    updateBuiltinVersions true
-    checkVersionUpdate true
 
     # 检查是否有更新可用
     force_checked=false
