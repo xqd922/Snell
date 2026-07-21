@@ -9,12 +9,12 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="1.9.7"
+sh_ver="1.9.8"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
 snell_v5_version="5.0.1"
-snell_v6_version="6.0.0b4"
+snell_v6_version="6.0.0rc"
 script_dir=$(cd "$(dirname "$0")"; pwd)
 script_path=$(echo -e "${script_dir}"|awk -F "$0" '{print $1}')
 snell_dir="/etc/snell/"
@@ -190,6 +190,15 @@ compareVersions(){
         elif [[ "$is_beta1" == false && "$is_beta2" == true ]]; then
             return 0  # version1 > version2(正式版优先)
         fi
+
+        # 处理精确的 rc 版本号 (如 6.0.0rc)，认为它是测试版中最新的
+        local rc_ver="${base_version1}rc"
+        if [[ "$version1" == "$rc_ver" && "$version2" != "$rc_ver" ]]; then
+            return 0  # version1 > version2
+        elif [[ "$version2" == "$rc_ver" && "$version1" != "$rc_ver" ]]; then
+            return 2  # version1 < version2
+        fi
+
         # 如果都是测试版或都是正式版，使用字母序比较
         if [[ "$version1" < "$version2" ]]; then
             return 2
