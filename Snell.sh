@@ -9,7 +9,7 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="1.9.9"
+sh_ver="1.9.10"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
@@ -191,16 +191,8 @@ compareVersions(){
             return 0  # version1 > version2(正式版优先)
         fi
 
-        # 处理精确的 rc 版本号 (如 6.0.0rc)，认为它是测试版中最新的
-        local rc_ver="${base_version1}rc"
-        if [[ "$version1" == "$rc_ver" && "$version2" != "$rc_ver" ]]; then
-            return 0  # version1 > version2
-        elif [[ "$version2" == "$rc_ver" && "$version1" != "$rc_ver" ]]; then
-            return 2  # version1 < version2
-        fi
-
-        # 如果都是测试版或都是正式版，使用字母序比较
-        if [[ "$version1" < "$version2" ]]; then
+        # 如果都是测试版或都是正式版，使用 sort -V 比较
+        if printf '%s\n' "$version1" "$version2" | sort -V | head -1 | grep -q "^$version1$"; then
             return 2
         else
             return 0
@@ -1947,24 +1939,33 @@ getLatestVersionFromWeb(){
         return 1
     fi
 
+    local max_version=""
+    local versions=""
+
     if [[ "$version_type" == "v4" ]]; then
-        latest_v4=$(echo "$page_content" | grep -oE "snell-server-v4\.[0-9]+\.[0-9]+-linux" | head -1 | sed 's/snell-server-v//g' | sed 's/-linux//g')
-        if [[ -n "$latest_v4" ]]; then
-            echo "$latest_v4"
-            return 0
-        fi
+        versions=$(echo "$page_content" | grep -oE "snell-server-v4\.[0-9]+\.[0-9]+-linux" | sed 's/snell-server-v//g' | sed 's/-linux//g')
     elif [[ "$version_type" == "v5" ]]; then
-        latest_v5=$(echo "$page_content" | grep -oE "snell-server-v5\.[0-9]+\.[0-9]+[a-z]*[0-9]*-linux" | head -1 | sed 's/snell-server-v//g' | sed 's/-linux//g')
-        if [[ -n "$latest_v5" ]]; then
-            echo "$latest_v5"
-            return 0
-        fi
+        versions=$(echo "$page_content" | grep -oE "snell-server-v5\.[0-9]+\.[0-9]+[a-z]*[0-9]*-linux" | sed 's/snell-server-v//g' | sed 's/-linux//g')
     elif [[ "$version_type" == "v6" ]]; then
-        latest_v6=$(echo "$page_content" | grep -oE "snell-server-v6\.[0-9]+\.[0-9]+[a-z]*[0-9]*-linux" | head -1 | sed 's/snell-server-v//g' | sed 's/-linux//g')
-        if [[ -n "$latest_v6" ]]; then
-            echo "$latest_v6"
-            return 0
-        fi
+        versions=$(echo "$page_content" | grep -oE "snell-server-v6\.[0-9]+\.[0-9]+[a-z]*[0-9]*-linux" | sed 's/snell-server-v//g' | sed 's/-linux//g')
+    fi
+
+    if [[ -n "$versions" ]]; then
+        for ver in $versions; do
+            if [[ -z "$max_version" ]]; then
+                max_version="$ver"
+            else
+                compareVersions "$ver" "$max_version"
+                if [[ $? -eq 0 ]]; then
+                    max_version="$ver"
+                fi
+            fi
+        done
+    fi
+
+    if [[ -n "$max_version" ]]; then
+        echo "$max_version"
+        return 0
     fi
 
     return 1
