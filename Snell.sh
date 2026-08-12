@@ -9,12 +9,12 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="1.9.10"
+sh_ver="2.0.0"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
 snell_v5_version="5.0.1"
-snell_v6_version="6.0.0rc"
+snell_v6_version="6.0.0rc2"
 script_dir=$(cd "$(dirname "$0")"; pwd)
 script_path=$(echo -e "${script_dir}"|awk -F "$0" '{print $1}')
 snell_dir="/etc/snell/"
@@ -213,7 +213,7 @@ validateVersionUrl(){
     getSnellDownloadUrl "$version"
 
     # 使用 HEAD 请求检查 URL 是否有效
-    if curl -I -s --max-time 10 "$snell_url" | head -1 | grep -q "200 OK"; then
+    if curl -I -s --max-time 10 "$snell_url" | head -1 | grep -qE "200 OK|HTTP/2 200|HTTP/[0-9.]+ 200"; then
         return 0  # URL 有效
     else
         return 1  # URL 无效
@@ -223,16 +223,31 @@ validateVersionUrl(){
 # 检查版本更新
 checkVersionUpdate(){
     local show_info=${1:-false}  # 是否显示详细信息，默认为静默
+
     update_available=false
     current_installed_version=""
     latest_available_version=""
     best_version=""
 
+    # 优先检查是否是命令行指定版本
+    if [[ -n "$TARGET_UPDATE_VERSION" ]]; then
+        update_available=true
+        best_version="$TARGET_UPDATE_VERSION"
+        latest_available_version="$TARGET_UPDATE_VERSION"
+        version_source="命令行指定"
+
+        # 仍然获取一下当前版本号用于显示
+        if [[ -e ${snell_version_file} ]]; then
+            current_installed_version=$(cat ${snell_version_file} | sed 's/^v//')
+        fi
+        return 0
+    fi
+
     if [[ -e ${snell_bin} && -e ${snell_conf} ]]; then
         current_ver=$(cat ${snell_conf}|grep 'version = '|awk -F 'version = ' '{print $NF}')
 
-        # 除 Snell v6 版外的旧版本已停更，不再检查在线更新
-        if [[ "$current_ver" != "6" ]]; then
+        # 除 Snell v6 版外的旧版本已停更，如果不是命令行指定则不再检查在线更新
+        if [[ "$current_ver" != "6" && -z "$TARGET_UPDATE_VERSION" ]]; then
             update_available=false
             return 0
         fi
@@ -415,14 +430,14 @@ downloadSnell(){
 	getSnellDownloadUrl "${version}"
 
 	# 首先检查 URL 是否有效
-	if ! curl -I -s --max-time 10 "$snell_url" | head -1 | grep -q "200 OK"; then
+	if ! curl -I -s --max-time 10 "$snell_url" | head -1 | grep -qE "200 OK|HTTP/2 200|HTTP/[0-9.]+ 200"; then
 		echo -e "${Error} Snell Server ${Yellow_font_prefix}${version_type}${Font_color_suffix} 下载链接无效 (404)！"
 
 		# 如果允许回退且提供了回退版本
 		if [[ "$allow_fallback" == true && -n "$fallback_version" ]]; then
 			echo -e "${Info} 尝试回退到已安装版本 v${fallback_version}..."
 			getSnellDownloadUrl "${fallback_version}"
-			if curl -I -s --max-time 10 "$snell_url" | head -1 | grep -q "200 OK"; then
+			if curl -I -s --max-time 10 "$snell_url" | head -1 | grep -qE "200 OK|HTTP/2 200|HTTP/[0-9.]+ 200"; then
 				version="$fallback_version"
 				echo -e "${Info} 回退成功，使用版本 v${version}"
 			else
@@ -1819,6 +1834,25 @@ updateSnellServer(){
 
     echo -e "${Info} 准备更新 Snell Server..."
 
+    if [[ -n "$TARGET_UPDATE_VERSION" ]]; then
+        local target_major=$(echo "$TARGET_UPDATE_VERSION" | awk -F. '{print $1}')
+        if [[ "$ver" != "$target_major" ]]; then
+             echo -e "${Warning} 注意：你正在尝试跨大版本更新 (从 v${ver} 到 v${target_major})！"
+             echo -e "${Warning} 跨大版本更新可能会导致原有配置文件不兼容，从而引发服务启动失败。"
+             read -e -p "是否确定继续？[y/N] (默认: n): " force_cross
+             [[ -z "${force_cross}" ]] && force_cross="n"
+             if [[ "${force_cross}" != [Yy]* ]]; then
+                 echo -e "${Info} 已取消操作。"
+                 exit 0
+             fi
+        fi
+    fi
+
+    # 如果因快捷指令跳过了更新检查，可能未获取当前版本，这里补全
+    if [[ -z "$current_installed_version" && -e ${snell_version_file} ]]; then
+        current_installed_version=$(cat ${snell_version_file} | sed 's/^v//')
+    fi
+
     # 检查是否有更新可用
     force_checked=false
     if [[ "$update_available" != true ]]; then
@@ -1855,7 +1889,11 @@ updateSnellServer(){
 
     # 显示版本信息
     echo -e "${Info} 当前版本: ${Yellow_font_prefix}v${current_installed_version}${Font_color_suffix}"
-    echo -e "${Info} 最新版本: ${Green_font_prefix}v${latest_available_version}${Font_color_suffix}"
+    if [[ -n "$TARGET_UPDATE_VERSION" ]]; then
+        echo -e "${Info} 目标版本: ${Green_font_prefix}v${latest_available_version}${Font_color_suffix}"
+    else
+        echo -e "${Info} 最新版本: ${Green_font_prefix}v${latest_available_version}${Font_color_suffix}"
+    fi
     echo -e "确定要更新吗？(Y/n)"
     read -e -p "(默认: y):" confirm
     [[ -z "${confirm}" ]] && confirm="y"
@@ -1867,7 +1905,11 @@ updateSnellServer(){
         return 0
     fi
 
-    echo -e "${Info} 开始更新 Snell Server 到最新版本..."
+    if [[ -n "$TARGET_UPDATE_VERSION" ]]; then
+        echo -e "${Info} 开始部署并更新 Snell Server 到 v${TARGET_UPDATE_VERSION}..."
+    else
+        echo -e "${Info} 开始更新 Snell Server 到最新版本..."
+    fi
 
     # 停止服务
     echo -e "${Info} 停止 Snell Server 服务..."
@@ -1880,7 +1922,11 @@ updateSnellServer(){
     fi
 
     # 根据版本选择下载函数，启用回退机制
-    echo -e "${Info} 开始下载最新版本..."
+    if [[ -n "$TARGET_UPDATE_VERSION" ]]; then
+        echo -e "${Info} 开始下载目标版本文件..."
+    else
+        echo -e "${Info} 开始下载最新版本文件..."
+    fi
     case "$ver" in
         "6")
             downloadSnell "${latest_available_version}" "Snell v6 最新版" true "${current_installed_version}"
@@ -2435,7 +2481,10 @@ startMenu(){
     action=$1
 
     # 检查版本更新（在显示菜单前）
-    checkVersionUpdateWithProgress
+    # 如果指定了快捷操作序号，则跳过更新检查以提升速度
+    if [[ -z "$action" ]]; then
+        checkVersionUpdateWithProgress
+    fi
 
     # 检查是否安装了 Snell，需要显示更新或升级选项
     show_update_option=false
@@ -2528,10 +2577,15 @@ Snell Server 管理脚本 ${Red_font_prefix}[v${sh_ver}]${Font_color_suffix}
     fi
     echo
 
-    if [[ "$show_update_option" == true || -n "$major_upgrade_text" ]]; then
-        read -e -p " 请输入数字[0-9]:" num
+    if [[ -n "$action" ]]; then
+        num=$action
+        echo -e " 自动选择选项: ${Green_font_prefix}${num}${Font_color_suffix}"
     else
-        read -e -p " 请输入数字[0-8]:" num
+        if [[ "$show_update_option" == true || -n "$major_upgrade_text" ]]; then
+            read -e -p " 请输入数字[0-9]:" num
+        else
+            read -e -p " 请输入数字[0-8]:" num
+        fi
     fi
 
     # 根据不同菜单模式处理用户输入
@@ -2583,4 +2637,49 @@ Snell Server 管理脚本 ${Red_font_prefix}[v${sh_ver}]${Font_color_suffix}
 
 }
 
+
+if [[ -n "$1" ]]; then
+    # 如果参数是快捷菜单选项 (0-9 或 00)
+    if [[ "$1" =~ ^[0-9]$ ]] || [[ "$1" == "00" ]]; then
+        startMenu "$1"
+        exit 0
+    fi
+
+    target_ver="$1"
+    target_ver=$(echo "$target_ver" | sed 's/^v//')
+    major_ver=$(echo "$target_ver" | awk -F. '{print $1}')
+
+    if [[ "$major_ver" != "4" && "$major_ver" != "5" && "$major_ver" != "6" ]]; then
+        echo -e "${Error} 提供的版本号格式不正确，或不支持该主版本！(示例: 5.0.1, 6.0.0rc1)"
+        exit 1
+    fi
+    if ! validateVersionUrl "$target_ver"; then
+        echo -e "${Error} 未找到 Snell v${target_ver} 版本的下载链接，请确认拼写完全正确！"
+        exit 1
+    fi
+
+    if [[ "$major_ver" == "4" ]]; then snell_v4_version="$target_ver"; fi
+    if [[ "$major_ver" == "5" ]]; then snell_v5_version="$target_ver"; fi
+    if [[ "$major_ver" == "6" ]]; then snell_v6_version="$target_ver"; fi
+
+    if [[ -e ${snell_bin} && -e ${snell_conf} ]]; then
+        TARGET_UPDATE_VERSION="$target_ver"
+        checkVersionUpdate true
+        updateSnellServer
+        exit 0
+    else
+        echo -e "${Info} 检测到尚未安装 Snell，进入全新安装流程 (v${target_ver})..."
+        if [[ "$major_ver" == "4" ]]; then installSnellV4; fi
+        if [[ "$major_ver" == "5" ]]; then installSnellV5; fi
+        if [[ "$major_ver" == "6" ]]; then installSnellV6; fi
+
+        checkStatus
+        if [[ "$status" == "running" ]]; then
+            echo -e "${Info} Snell Server v${target_ver} 已成功安装并启动。"
+        else
+            echo -e "${Error} 安装遇到问题，服务未能启动，请通过 viewStatus 检查日志。"
+        fi
+        exit 0
+    fi
+fi
 startMenu
