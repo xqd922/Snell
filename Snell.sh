@@ -9,7 +9,7 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="2.0.0"
+sh_ver="2.0.1"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
@@ -1877,11 +1877,13 @@ updateSnellServer(){
             else
                 echo -e "${Info} 重新检查后仍为最新版本"
                 sleep 3s
+                unset TARGET_UPDATE_VERSION
                 startMenu
                 return 0
             fi
         else
             sleep 3s
+            unset TARGET_UPDATE_VERSION
             startMenu
             return 0
         fi
@@ -1935,6 +1937,7 @@ updateSnellServer(){
             echo -e "${Error} 不支持的版本: Snell v${ver}"
             systemctl start snell-server
             sleep 3s
+            unset TARGET_UPDATE_VERSION
             startMenu
             return 1
             ;;
@@ -1975,6 +1978,7 @@ updateSnellServer(){
     fi
 
     sleep 3s
+    unset TARGET_UPDATE_VERSION
     startMenu
 }
 
