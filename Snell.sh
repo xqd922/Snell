@@ -242,13 +242,17 @@ checkVersionUpdate(){
 
             # 尝试从二进制程序获取真实版本 (容错处理)
             if command -v timeout >/dev/null 2>&1 && [[ -x ${snell_bin} ]]; then
-                bin_version=$(timeout 1 ${snell_bin} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*' | head -1)
-                [[ -z "$bin_version" ]] && bin_version=$(timeout 1 ${snell_bin} -v 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*' | head -1)
-                [[ -z "$bin_version" ]] && bin_version=$(timeout 1 ${snell_bin} --help 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*' | head -1)
+                bin_version=$(timeout 1 ${snell_bin} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[-_ ]?[a-zA-Z0-9]*' | sed 's/[-_ ]//g' | head -1)
+                [[ -z "$bin_version" ]] && bin_version=$(timeout 1 ${snell_bin} -v 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[-_ ]?[a-zA-Z0-9]*' | sed 's/[-_ ]//g' | head -1)
+                [[ -z "$bin_version" ]] && bin_version=$(timeout 1 ${snell_bin} --help 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[-_ ]?[a-zA-Z0-9]*' | sed 's/[-_ ]//g' | head -1)
 
                 if [[ -n "$bin_version" && "$bin_version" != "$installed_version" ]]; then
-                    installed_version="$bin_version"
-                    echo "v${installed_version}" > "${snell_version_file}" # 修复不同步的问题
+                    # 只有当基础版本号真的不一致时，或者获取到的版本比保存的版本更详细时才覆盖
+                    # 防止因为二进制不输出 rc 等后缀导致缓存的带后缀版本被降级抹除
+                    if [[ "$installed_version" != "$bin_version"* ]]; then
+                        installed_version="$bin_version"
+                        echo "v${installed_version}" > "${snell_version_file}" # 修复不同步的问题
+                    fi
                 fi
             fi
 
