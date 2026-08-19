@@ -9,7 +9,7 @@ export PATH
 #	WebSite: https://aapls.com
 #=================================================
 
-sh_ver="2.0.1"
+sh_ver="2.0.2"
 snell_v2_version="2.0.6"
 snell_v3_version="3.0.1"
 snell_v4_version="4.1.1"
@@ -2312,10 +2312,11 @@ viewConfig(){
 
 # 查看运行状态
 viewStatus(){
-	echo -e "${Info} 获取 Snell Server 活动日志 ……"
-	echo -e "${Tip} 返回主菜单请按 q ！"
-	systemctl status snell-server
-	startMenu
+    echo -e "${Info} 获取 Snell Server 活动日志 ……"
+    systemctl status snell-server --no-pager
+    echo
+    read -n 1 -s -r -p "按任意键返回主菜单..."
+    startMenu
 }
 
 # 检查地理位置（用于更新脚本源选择）
